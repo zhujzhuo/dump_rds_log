@@ -1,3 +1,4 @@
+import pdb
 import time
 import subprocess
 import shlex
@@ -60,7 +61,6 @@ for file in file_list:
         file_list.remove(file)
 # Dump log
 try:
-    #pdb.set_trace()
     os.chdir(dump_path)
     try:
         with open(process_log, 'a') as f:
@@ -88,46 +88,35 @@ try:
 except OSError as e:
     print e
 
-
-# validate the rotate_size and delete_day
-
-    print "Error: rotate_size or delete_day format incorrect"
-    exit(1)
-
-
 # rotate old files
 if rotate_size:
-    reg_size = re.compile('^\dG$')
+    reg_size = re.compile('^\d+G$')
     if reg_size.match(rotate_size):
         rotate_size = rotate_size.replace('G', '')
-        if os.path.getsize(process_log) > rotate_size * 1024 * 1024:
-            log_list = glob.glob(process_log + '*')
+        if os.path.getsize(dump_log) > int(rotate_size) * 1024 * 1024 * 1024:
+            log_list = glob.glob(dump_log + '*')
             log_list.sort()
             log_list.reverse()
-            n = re.compile('\d')
+            n = re.compile('\d+')
             for name in log_list:
-                s = int(n.search(name))
-                new_name = name.replace(str(s), str(s+1))
-                move(name, new_name)
-        process_log_1 = process_log.replace('.log', '.1.log')
-        move(process_log, process_log_1)
-        subprocess.call(['gzip', process_log_1])
+                if n.search(name):
+                    s = int(n.search(name).group(0))
+                    new_name = name.replace(str(s), str(s+1))
+                    move(name, new_name)
+            dump_log_1 = dump_log.replace('.log', '.log.1')
+            move(dump_log, dump_log_1)
+            subprocess.call(['gzip', dump_log_1])
     else:
         print "Error: The rotate_size format incorrect"
         exit(1)
 
-
-
 # delete old files
 if delete_day:
-    reg_day = re.compile('^\d$')
+    reg_day = re.compile('^\d+$')
     if reg_day.match(delete_day):
-        raw_cmd = "find -name '%s*' -mtime +% -delete" % (process_log, delete_day)
-        print raw_cmd
-        # cmd = shlex.split(raw_cmd)
-        # subprocess.call(cmd)
+        raw_cmd = "find %s -name '%s*' -mtime +%s -delete" % (os.path.dirname(dump_log), os.path.basename(dump_log), delete_day)
+        cmd = shlex.split(raw_cmd)
+        subprocess.call(cmd)
     else:
         print "Error: The delete_day format incorrect"
         exit(1)
-
-
