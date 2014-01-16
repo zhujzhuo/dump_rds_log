@@ -90,31 +90,44 @@ except OSError as e:
 
 
 # validate the rotate_size and delete_day
-reg_size = re.compile('^\dG$')
-reg_day = re.compile('^\d$')
 
-if not reg_day.match(rotate_size) or not reg_day.match(delete_day):
     print "Error: rotate_size or delete_day format incorrect"
     exit(1)
 
-# rotate old files
-rotate_size = rotate_size.replace('G', '')
-if os.path.getsize(process_log) > rotate_size * 1024 * 1024:
-    log_list = glob.glob(process_log + '*')
-    log_list.sort()
-    log_list.reverse()
-    n = re.compile('\d')
-    for name in log_list:
-        s = int(n.search(name))
-        new_name = name.replace(str(s), str(s+1))
-        move(name, new_name)
 
-process_log_1 = process_log.replace('.log', '.1.log')
-move(process_log, process_log_1)
-subprocess.call(['gzip', process_log_1])
+# rotate old files
+if rotate_size:
+    reg_size = re.compile('^\dG$')
+    if reg_size.match(rotate_size):
+        rotate_size = rotate_size.replace('G', '')
+        if os.path.getsize(process_log) > rotate_size * 1024 * 1024:
+            log_list = glob.glob(process_log + '*')
+            log_list.sort()
+            log_list.reverse()
+            n = re.compile('\d')
+            for name in log_list:
+                s = int(n.search(name))
+                new_name = name.replace(str(s), str(s+1))
+                move(name, new_name)
+        process_log_1 = process_log.replace('.log', '.1.log')
+        move(process_log, process_log_1)
+        subprocess.call(['gzip', process_log_1])
+    else:
+        print "Error: The rotate_size format incorrect"
+        exit(1)
+
+
 
 # delete old files
-raw_cmd = "find -name '%s*' -mtime +% -delete" % (process_log, delete_day)
-cmd = shlex.split(raw_cmd)
-subprocess.call(cmd)
+if delete_day:
+    reg_day = re.compile('^\d$')
+    if reg_day.match(delete_day):
+        raw_cmd = "find -name '%s*' -mtime +% -delete" % (process_log, delete_day)
+        print raw_cmd
+        # cmd = shlex.split(raw_cmd)
+        # subprocess.call(cmd)
+    else:
+        print "Error: The delete_day format incorrect"
+        exit(1)
+
 
