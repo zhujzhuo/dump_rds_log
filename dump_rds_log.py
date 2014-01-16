@@ -4,6 +4,8 @@ import shlex
 import re
 import argparse
 import os.path
+import glob
+from shutil import move
 import sys
 from xml.etree import ElementTree
 
@@ -16,11 +18,16 @@ parser = argparse.ArgumentParser(
 parser.add_argument('rds_id', action="store", help="RDS identifier") 
 parser.add_argument('log_name_pattern', action="store", help="Pattern used to filter log file names")
 parser.add_argument('dump_path', action="store", help="Path your log files dump to")
+parser.add_argument('-s', '--rotate_size', action="store", help="Rotate log file if this size be reached")
+parser.add_argument('-d', '--delete_day', action="store", help="Delete rotated file N days aog")
 
 arguments = parser.parse_args()
 rds_id = arguments.rds_id
 log_name_pattern = arguments.log_name_pattern
 dump_path = arguments.dump_path.rstrip('/')
+rotate_size = arguments.rotate_size
+delete_day = arguments.delete_day
+
 dump_log = dump_path + '/' + rds_id + "-" + log_name_pattern + ".log"
 process_log = dump_path + '/' + rds_id + "-" + log_name_pattern + "-process.log"
 time_file = dump_path + '/' + rds_id + "-" + log_name_pattern + ".time"
@@ -29,8 +36,8 @@ time_file = dump_path + '/' + rds_id + "-" + log_name_pattern + ".time"
 raw_cmd = "rds-describe-db-log-files %s --filename-contains %s --show-xml" % (rds_id, log_name_pattern)
 cmd = shlex.split(raw_cmd)
 res = subprocess.check_output(cmd)
-strinfo=re.compile(' xmlns=.*')
-res = strinfo.sub('>',res)
+strinfo = re.compile(' xmlns=.*')
+res = strinfo.sub('>', res)
 root = ElementTree.fromstring(res)
 tree = ElementTree.ElementTree(root)
 file_list = []
@@ -40,6 +47,7 @@ for elem in tree.iter(tag='DescribeDBLogFilesDetails'):
         single_file.append(child.text)
     file_list.append(single_file)
 
+# sort the file by time
 for i in range(len(file_list)):
     for j in range(i+1, len(file_list)):
         if file_list[i][0] > file_list[j][0]:
@@ -79,3 +87,34 @@ try:
                     f_time_file.write(file[0])
 except OSError as e:
     print e
+
+
+# validate the rotate_size and delete_day
+reg_size = re.compile('^\dG$')
+reg_day = re.compile('^\d$')
+
+if not reg_day.match(rotate_size) or not reg_day.match(delete_day):
+    print "Error: rotate_size or delete_day format incorrect"
+    exit(1)
+
+# rotate old files
+rotate_size = rotate_size.replace('G', '')
+if os.path.getsize(process_log) > rotate_size * 1024 * 1024:
+    log_list = glob.glob(process_log + '*')
+    log_list.sort()
+    log_list.reverse()
+    n = re.compile('\d')
+    for name in log_list:
+        s = int(n.search(name))
+        new_name = name.replace(str(s), str(s+1))
+        move(name, new_name)
+
+process_log_1 = process_log.replace('.log', '.1.log')
+move(process_log, process_log_1)
+subprocess.call(['gzip', process_log_1])
+
+# delete old files
+raw_cmd = "find -name '%s*' -mtime +% -delete" % (process_log, delete_day)
+cmd = shlex.split(raw_cmd)
+subprocess.call(cmd)
+
