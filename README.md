@@ -1,5 +1,4 @@
 # dump_rds_log
-
 A tool to dump AWS RDS logs to your local filesystem.
 
 ## Configuration before using
